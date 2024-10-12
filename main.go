@@ -52,8 +52,8 @@ func main() {
 	})
 
 	// Webserver starten
-	log.Println("Webserver startet auf Port: 8080")
-	err := http.ListenAndServe(":8080", router)
+	log.Println("Webserver startet auf Port: 8383")
+	err := http.ListenAndServe(":8383", router)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

@@ -17,15 +17,16 @@ const (
 var websocketUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		switch origin {
-		case "http://localhost:8080":
-			return true
-		default:
-			return false
-		}
-	},
+	// Commented for testing purposes
+	//CheckOrigin: func(r *http.Request) bool {
+	//	origin := r.Header.Get("Origin")
+	//	switch origin {
+	//	case "http://localhost:8383":
+	//		return true
+	//	default:
+	//		return false
+	//	}
+	//},
 }
 
 type Hub struct {
