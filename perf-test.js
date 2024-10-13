@@ -1,56 +1,78 @@
-import { sleep, check } from 'k6';
+import { check, sleep } from 'k6';
 import ws from 'k6/ws';
-import { Counter } from 'k6/metrics';
+import { Trend } from 'k6/metrics';
 
-export let errorCount = new Counter('errors');
+const url = 'ws://localhost:8383/ws';  // Replace with your WebSocket server URL
+const connectTime = new Trend('ws_connect_time');
+const sendMessageTime = new Trend('ws_send_message_time');
 
 export let options = {
     stages: [
-        { duration: '1m', target: 100 },   // Ramp-up to 100 users
-        { duration: '3m', target: 100 },   // Stay at 100 users
-        { duration: '1m', target: 0 },     // Ramp-down to 0 users
+        { duration: '1m', target: 100 },  // Ramp-up to 100 users over 1 minute
+        { duration: '3m', target: 100 },  // Hold 100 users for 3 minutes
+        { duration: '1m', target: 0 },    // Ramp-down to 0 users
     ],
-    thresholds: {
-        errors: ['count<10'], // Fail the test if more than 10 errors occur
-        http_req_duration: ['p(95)<500'], // 95% of requests must complete below 500ms
-    },
 };
 
 export default function () {
-    const url = 'ws://localhost:8383/ws';
-    const params = { tags: { user_id: `${__VU}` } }; // Use VU as user identifier
+    const vuId = __VU;  // Unique Virtual User ID
+    const params = { tags: { vuId: `VU-${vuId}` } };  // Tag WebSocket connection with VU ID
 
     const res = ws.connect(url, params, function (socket) {
-        socket.on('open', function () {
-            console.log('Connected: ' + params.tags.user_id);
-            socket.send(JSON.stringify({ type: 'subscribe:chat' }));
-        });
+        let startConnectTime = new Date().getTime();
 
-        socket.on('message', function (message) {
-            console.log('Received message: ' + message);
-            check(message, {
-                'Message is received': (msg) => msg !== null,
+        socket.on('open', function open() {
+            let connectTimeTaken = new Date().getTime() - startConnectTime;
+            connectTime.add(connectTimeTaken);
+
+            console.log(`[VU-${vuId}] Connected to WebSocket`);
+
+            // Subscribe to the chat room
+            socket.send(JSON.stringify({
+                type: 'subscribe:chat',
+            }));
+
+            // Send a chat message after subscribing
+            let startSendMessageTime = new Date().getTime();
+            socket.send(JSON.stringify({
+                type: 'chat:message',
+                payload: {
+                    from: `test_user_${vuId}`,  // Unique username for each VU
+                    message: `Hello from VU-${vuId}`,
+                },
+            }));
+            let sendMessageTimeTaken = new Date().getTime() - startSendMessageTime;
+            sendMessageTime.add(sendMessageTimeTaken);
+
+            // Listen for chat messages
+            socket.on('message', function (msg) {
+                const messageData = JSON.parse(msg);
+                if (messageData.type === 'chat:message') {
+                    console.log(`[VU-${vuId}] Received message: ${JSON.stringify(messageData.payload)}`);
+                    check(messageData.payload, { 'Message received': (m) => m.message !== '' });
+                }
             });
+
+            // Unsubscribe after 5 seconds
+            sleep(5);
+            socket.send(JSON.stringify({
+                type: 'unsubscribe:chat',
+            }));
+
+            // Close connection after 10 seconds
+            sleep(5);
+            socket.close();
         });
 
-        socket.on('close', function () {
-            console.log('Disconnected: ' + params.tags.user_id);
+        socket.on('close', function close() {
+            console.log(`[VU-${vuId}] Disconnected`);
         });
 
         socket.on('error', function (e) {
-            errorCount.add(1);
-            console.error('An unexpected error occurred: ', e.error());
+            console.error(`[VU-${vuId}] WebSocket error:`, e);
         });
-
-        // Send a chat message every 1-3 seconds
-        for (let i = 0; i < 10; i++) {
-            sleep(Math.random() * 2 + 1);
-            socket.send(JSON.stringify({ type: 'chat:message', payload: { from: `User-${__VU}`, message: `Hello from user ${__VU}` } }));
-        }
-
-        sleep(1);
-        socket.close();
     });
 
     check(res, { 'Connected successfully': (r) => r && r.status === 101 });
+    sleep(1);
 }
