@@ -2,9 +2,11 @@ package ws
 
 import (
 	"github.com/alphadose/haxmap"
-	"log"
+	"go.uber.org/zap"
 	"net/http"
 	"time"
+	"webs/config"
+	log "webs/pkg/logger"
 
 	"github.com/gorilla/websocket"
 )
@@ -37,16 +39,17 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	send       chan *Event
+	config     *config.Config
 }
 
-func NewHub() *Hub {
+func NewHub(cfg *config.Hub) *Hub {
 	hub := &Hub{
-		clients:    haxmap.New[string, *Client](100_000),
-		rooms:      haxmap.New[string, *Room](100),
-		events:     haxmap.New[string, EventHandler](500_000),
-		register:   make(chan *Client, 100_000),
-		unregister: make(chan *Client, 100_000),
-		send:       make(chan *Event, 100_000),
+		clients:    haxmap.New[string, *Client](uintptr(cfg.BufferedClientSize)),
+		rooms:      haxmap.New[string, *Room](uintptr(cfg.BufferedRoomSize)),
+		events:     haxmap.New[string, EventHandler](uintptr(cfg.BufferedEventSize)),
+		register:   make(chan *Client, cfg.BufferedRegisterSize),
+		unregister: make(chan *Client, cfg.BufferedUnregisterSize),
+		send:       make(chan *Event, cfg.BufferedMessageSize),
 	}
 
 	// Routine starten
@@ -62,16 +65,23 @@ func (hub *Hub) run() {
 		case client := <-hub.unregister:
 			if _, ok := hub.clients.Get(client.ID); ok {
 				// Client entfernen
-				client.rooms.ForEach(func(key string, value *Room) bool {
-					value.unregister <- client
+				client.rooms.ForEach(func(key string, room *Room) bool {
+
+					// Disconnect from Room
+					if _, ok := room.clients.Get(client.ID); ok {
+						room.clients.Del(client.ID)
+						client.rooms.Del(room.name)
+						log.ZLogger.Debug("[MSG-Room] Client %s verlässt den Raum '%s'", zap.String("ClientID", client.ID), zap.String("RoomName", room.name))
+					}
+
+					// Disconnect from Hub
+					close(client.send)
+					client.conn.Close()
+					hub.clients.Del(client.ID)
+					// Rate-Limiter entfernen
+					log.ZLogger.Debug("[MSG-HUB] Client abgemeldet: %s", zap.String("ClientID", client.ID))
 					return true
 				})
-				close(client.send)
-				client.conn.Close()
-				hub.clients.Del(client.ID)
-
-				// Rate-Limiter entfernen
-				log.Printf("[MSG-HUB] Client abgemeldet: %s", client.ID)
 			}
 		}
 	}
@@ -84,7 +94,7 @@ func (hub *Hub) OnConnect(w http.ResponseWriter, r *http.Request) (*Client, erro
 	// Upgrade die reguläre Verbindung zu einer Websocket Verbindung
 	conn, err := websocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("[ERR-HUB] Akzeptieren der Verbindung:", err)
+		log.ZLogger.Error("[ERR-HUB] Akzeptieren der Verbindung:", zap.Error(err))
 		return nil, err
 	}
 
@@ -113,9 +123,9 @@ func (hub *Hub) On(event string, eventHandler EventHandler) *Hub {
 }
 
 // CreateRooms erstellt mehrere Räume
-func (hub *Hub) CreateRooms(roomNames []string) {
+func (hub *Hub) CreateRooms(roomNames []string, cfg *config.Room) {
 	for _, name := range roomNames {
-		room := newRoom(name)
+		room := newRoom(name, cfg)
 		hub.rooms.Set(name, room)
 	}
 }

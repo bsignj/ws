@@ -2,8 +2,9 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
+	"go.uber.org/zap"
 	"strings"
+	log "webs/pkg/logger"
 )
 
 type EventHandler func(*Event)
@@ -33,7 +34,7 @@ func (event *Event) UnmarshalPayload(target interface{}) error {
 func CreateAndSendEvent(hub *Hub, eventType string, payload interface{}) {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("[ERR-Event] Marshal %s -> %v", eventType, err)
+		log.ZLogger.Error("[ERR-Event] Marshal %s -> %v", zap.Error(err))
 		return
 	}
 

@@ -3,8 +3,9 @@ package ws
 import (
 	"bytes"
 	"github.com/alphadose/haxmap"
-	"log"
+	"go.uber.org/zap"
 	"time"
+	log "webs/pkg/logger"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -56,7 +57,7 @@ func (client *Client) readMessage() {
 		_, message, err := client.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[ERR-Client] Nachricht lesen -> %v\n", err)
+				log.ZLogger.Error("[ERR-Client] Nachricht lesen -> %v\n", zap.Error(err))
 			}
 			return
 		}
@@ -67,10 +68,10 @@ func (client *Client) readMessage() {
 		// Nachricht in das Event Struct einlesen
 		event, err := NewEventFromRaw(message)
 		if err != nil {
-			log.Printf("[ERR-Client] Event erstellen -> %v", err)
+			log.ZLogger.Error("[ERR-Client] Event erstellen -> %v", zap.Error(err))
 			continue
 		}
-		log.Printf("[MSG-Client] Eingehende Nachricht -> %v", string(message))
+		log.ZLogger.Debug("[MSG-Client] Eingehende Nachricht -> %v", zap.String("Message", string(message)))
 
 		// Event weiterleiten
 		if eventHandler, ok := client.hub.events.Get(event.Type); ok {
@@ -93,7 +94,7 @@ func (client *Client) writeMessage() {
 		// Ping an den Client senden
 		case <-ticker.C:
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("[ERR-Client] Fehler Ping senden -> %v\n", err)
+				log.ZLogger.Error("[ERR-Client] Fehler Ping senden -> %v\n", zap.Error(err))
 				return
 			}
 
@@ -101,20 +102,20 @@ func (client *Client) writeMessage() {
 		case event, ok := <-client.send:
 			if !ok {
 				if err := client.conn.WriteMessage(websocket.CloseMessage, nil); err != nil {
-					log.Printf("[ERR-Client] Websocket Verbindung geschlossen -> %v\n", err)
+					log.ZLogger.Error("[ERR-Client] Websocket Verbindung geschlossen -> %v\n", zap.Error(err))
 				}
 				return
 			}
 
 			message, err := event.Raw()
 			if err != nil {
-				log.Printf("[ERR-Client] Nachricht erstellen -> %v", err)
+				log.ZLogger.Error("[ERR-Client] Nachricht erstellen -> %v", zap.Error(err))
 				continue
 			}
-			log.Printf("[MSG-Client] Ausgehende Nachricht -> %v", string(message))
+			log.ZLogger.Debug("[MSG-Client] Ausgehende Nachricht -> %v", zap.String("Message", string(message)))
 
 			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("[ERR-Client] Fehler beim Schreiben der Nachricht -> %v\n", err)
+				log.ZLogger.Error("[ERR-Client] Fehler beim Schreiben der Nachricht -> %v\n", zap.Error(err))
 				return
 			}
 		}

@@ -2,8 +2,9 @@ package ws
 
 import (
 	"github.com/alphadose/haxmap"
-	"log"
-	"time"
+	"go.uber.org/zap"
+	"webs/config"
+	log "webs/pkg/logger"
 )
 
 type Room struct {
@@ -13,31 +14,30 @@ type Room struct {
 	unregister chan *Client
 	send       chan *Event
 	workers    int
-	ticker     *time.Ticker
 }
 
-func newRoom(name string) *Room {
+func newRoom(name string, cfg *config.Room) *Room {
 	room := &Room{
 		name:       name,
-		clients:    haxmap.New[string, *Client](100_000),
-		register:   make(chan *Client, 100_000),
-		unregister: make(chan *Client, 100_000),
-		send:       make(chan *Event, 1_000_000),
+		clients:    haxmap.New[string, *Client](uintptr(cfg.BufferedClientSize)),
+		register:   make(chan *Client, cfg.BufferedRegisterSize),
+		unregister: make(chan *Client, cfg.BufferedUnregisterSize),
+		send:       make(chan *Event, cfg.BufferedMessageSize),
 		workers:    100,
-		ticker:     time.NewTicker(100 * time.Millisecond), // Throttle broadcasts every 100ms
 	}
 
 	// Routine starten
 
 	for i := 0; i < room.workers; i++ {
-		go room.run(i)
+		go room.consumeBroadcastedMessage(i)
 	}
+	go room.run()
 
 	return room
 }
 
 // Startet die Routine zur Verwaltung des Raums
-func (room *Room) run(workerID int) {
+func (room *Room) run() {
 
 	for {
 		select {
@@ -45,23 +45,29 @@ func (room *Room) run(workerID int) {
 		case client := <-room.register:
 			room.clients.Set(client.ID, client)
 			client.rooms.Set(room.name, room)
-			log.Printf("WorkerID-%d | [MSG-Room] Client %s betritt den Raum '%s'", workerID, client.ID, room.name)
+			log.ZLogger.Debug("[MSG-Room] Client %s betritt den Raum '%s'", zap.String("ClientID", client.ID), zap.String("RoomName", room.name))
 
 		// Client entfernen
 		case client := <-room.unregister:
 			if _, ok := room.clients.Get(client.ID); ok {
 				room.clients.Del(client.ID)
 				client.rooms.Del(room.name)
-				log.Printf("WorkerID-%d | [MSG-Room] Client %s verlässt den Raum '%s'", workerID, client.ID, room.name)
+				log.ZLogger.Debug("[MSG-Room] Client %s verlässt den Raum '%s'", zap.String("ClientID", client.ID), zap.String("RoomName", room.name))
 			}
+		}
+	}
+}
 
+func (room *Room) consumeBroadcastedMessage(workerID int) {
+	for {
+		select {
 		// Nachricht an alle Clients im Raum schicken
 		case event := <-room.send:
 			room.clients.ForEach(func(_ string, client *Client) bool {
 				select {
 				case client.send <- event:
 				default:
-					log.Printf("WorkerID-%d | [WARN] Event-Verlust bei Client %s", workerID, client.ID)
+					log.ZLogger.Warn("[MSG-Room] Event-Verlust bei Client %s", zap.Int("WorkerID", workerID), zap.String("ClientID", client.ID))
 				}
 				return true
 			})

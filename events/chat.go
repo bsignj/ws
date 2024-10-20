@@ -1,8 +1,9 @@
 package events
 
 import (
-	"log"
+	"go.uber.org/zap"
 	"time"
+	log "webs/pkg/logger"
 	"webs/ws"
 )
 
@@ -21,7 +22,7 @@ type ChatMessageOut struct {
 func ChatMessageHandler(hub *ws.Hub, client *ws.Client, event *ws.Event) {
 	var messageIn ChatMessageIn
 	if err := event.UnmarshalPayload(&messageIn); err != nil {
-		log.Printf("[ERR-MAIN] Unmarshal messageIn -> %v", event.Payload)
+		log.ZLogger.Error("[ERR-MAIN] Unmarshal messageIn", zap.Any("Payload", event.Payload))
 	}
 
 	var messageOut ChatMessageOut

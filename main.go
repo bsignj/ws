@@ -1,23 +1,37 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"go.uber.org/zap"
 	"net/http"
+	"webs/config"
 	"webs/events"
+	log "webs/pkg/logger"
 	"webs/ws"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
+
+	// Configuration
+	cfg, err := config.NewConfig()
+	if err != nil {
+		fmt.Errorf("config error: %+v", err)
+		panic(err)
+	}
+
+	zapLogger := log.NewLogger(cfg.Log.Level, cfg.Log.OutputPath, cfg.Log.ErrOutputPath)
+	defer zapLogger.Sync()
+
 	// Router erstellen
 	router := chi.NewRouter()
 
 	// Hub erstellen
-	hub := ws.NewHub()
+	hub := ws.NewHub(&cfg.Hub)
 	hub.CreateRooms([]string{
 		"chat",
-	})
+	}, &cfg.Room)
 
 	// Statische Dateien einbinden
 	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -52,9 +66,9 @@ func main() {
 	})
 
 	// Webserver starten
-	log.Println("Webserver startet auf Port: 8383")
-	err := http.ListenAndServe(":8383", router)
+	log.ZLogger.Info("Webserver startet auf Port", zap.String("Port", cfg.App.Port))
+	err = http.ListenAndServe(":"+cfg.App.Port, router)
 	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
+		log.ZLogger.Fatal("ListenAndServe: ", zap.Error(err))
 	}
 }
