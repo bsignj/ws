@@ -2,6 +2,7 @@ package ws
 
 import (
 	"bytes"
+	"github.com/alphadose/haxmap"
 	"log"
 	"time"
 
@@ -24,7 +25,7 @@ type Client struct {
 	ID    string
 	hub   *Hub
 	conn  *websocket.Conn
-	rooms map[string]*Room
+	rooms *haxmap.Map[string, *Room]
 	send  chan *Event
 }
 
@@ -33,15 +34,14 @@ func newClient(hub *Hub, conn *websocket.Conn) *Client {
 		ID:    uuid.New().String(),
 		hub:   hub,
 		conn:  conn,
-		rooms: make(map[string]*Room),
-		send:  make(chan *Event),
+		rooms: haxmap.New[string, *Room](100),
+		send:  make(chan *Event, 1000),
 	}
 }
 
 func (client *Client) readMessage() {
 	defer func() {
 		client.hub.unregister <- client
-		client.conn.Close()
 	}()
 
 	client.conn.SetReadLimit(maxMessageSize)
@@ -58,7 +58,7 @@ func (client *Client) readMessage() {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("[ERR-Client] Nachricht lesen -> %v\n", err)
 			}
-			break
+			return
 		}
 
 		// Nachricht trimmen
@@ -73,7 +73,7 @@ func (client *Client) readMessage() {
 		log.Printf("[MSG-Client] Eingehende Nachricht -> %v", string(message))
 
 		// Event weiterleiten
-		if eventHandler, ok := client.hub.events[event.Type]; ok {
+		if eventHandler, ok := client.hub.events.Get(event.Type); ok {
 			eventHandler(event)
 		}
 	}
@@ -86,7 +86,6 @@ func (client *Client) writeMessage() {
 	defer func() {
 		ticker.Stop()
 		client.hub.unregister <- client
-		client.conn.Close()
 	}()
 
 	for {

@@ -1,57 +1,70 @@
 package ws
 
-import "log"
+import (
+	"github.com/alphadose/haxmap"
+	"log"
+	"time"
+)
 
 type Room struct {
 	name       string
-	clients    map[*Client]bool
+	clients    *haxmap.Map[string, *Client]
 	register   chan *Client
 	unregister chan *Client
 	send       chan *Event
+	workers    int
+	ticker     *time.Ticker
 }
 
 func newRoom(name string) *Room {
 	room := &Room{
 		name:       name,
-		clients:    make(map[*Client]bool),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		send:       make(chan *Event),
+		clients:    haxmap.New[string, *Client](100_000),
+		register:   make(chan *Client, 100_000),
+		unregister: make(chan *Client, 100_000),
+		send:       make(chan *Event, 1_000_000),
+		workers:    100,
+		ticker:     time.NewTicker(100 * time.Millisecond), // Throttle broadcasts every 100ms
 	}
 
 	// Routine starten
-	go room.run()
+
+	for i := 0; i < room.workers; i++ {
+		go room.run(i)
+	}
 
 	return room
 }
 
 // Startet die Routine zur Verwaltung des Raums
-func (room *Room) run() {
+func (room *Room) run(workerID int) {
+
 	for {
 		select {
 		// Client hinzufügen
 		case client := <-room.register:
-			room.clients[client] = true
-			client.rooms[room.name] = room
-			log.Printf("[MSG-Room] Client %s betritt den Raum '%s'", client.ID, room.name)
+			room.clients.Set(client.ID, client)
+			client.rooms.Set(room.name, room)
+			log.Printf("WorkerID-%d | [MSG-Room] Client %s betritt den Raum '%s'", workerID, client.ID, room.name)
 
 		// Client entfernen
 		case client := <-room.unregister:
-			if _, ok := room.clients[client]; ok {
-				delete(room.clients, client)
-				delete(client.rooms, room.name)
-				log.Printf("[MSG-Room] Client %s verlässt den Raum '%s'", client.ID, room.name)
+			if _, ok := room.clients.Get(client.ID); ok {
+				room.clients.Del(client.ID)
+				client.rooms.Del(room.name)
+				log.Printf("WorkerID-%d | [MSG-Room] Client %s verlässt den Raum '%s'", workerID, client.ID, room.name)
 			}
 
 		// Nachricht an alle Clients im Raum schicken
 		case event := <-room.send:
-			for client := range room.clients {
+			room.clients.ForEach(func(_ string, client *Client) bool {
 				select {
 				case client.send <- event:
 				default:
-					log.Printf("[WARN] Event-Verlust bei Client %s", client.ID)
+					log.Printf("WorkerID-%d | [WARN] Event-Verlust bei Client %s", workerID, client.ID)
 				}
-			}
+				return true
+			})
 		}
 	}
 }

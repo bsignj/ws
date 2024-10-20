@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"github.com/alphadose/haxmap"
 	"log"
 	"net/http"
 	"time"
@@ -30,9 +31,9 @@ var websocketUpgrader = websocket.Upgrader{
 }
 
 type Hub struct {
-	clients    map[*Client]bool
-	rooms      map[string]*Room
-	events     map[string]EventHandler
+	clients    *haxmap.Map[string, *Client]
+	rooms      *haxmap.Map[string, *Room]
+	events     *haxmap.Map[string, EventHandler]
 	register   chan *Client
 	unregister chan *Client
 	send       chan *Event
@@ -40,12 +41,12 @@ type Hub struct {
 
 func NewHub() *Hub {
 	hub := &Hub{
-		clients:    make(map[*Client]bool),
-		rooms:      make(map[string]*Room),
-		events:     make(map[string]EventHandler),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		send:       make(chan *Event),
+		clients:    haxmap.New[string, *Client](100_000),
+		rooms:      haxmap.New[string, *Room](100),
+		events:     haxmap.New[string, EventHandler](500_000),
+		register:   make(chan *Client, 100_000),
+		unregister: make(chan *Client, 100_000),
+		send:       make(chan *Event, 100_000),
 	}
 
 	// Routine starten
@@ -57,44 +58,20 @@ func NewHub() *Hub {
 func (hub *Hub) run() {
 	for {
 		select {
-		// Client Register
-		case client := <-hub.register:
-			// Client hinzufügen
-			hub.clients[client] = true
-
-			// Rate-Limiter hinzufügen
-			log.Printf("[MSG-HUB] Client registriert: %s", client.ID)
-
 		// Client Unregister
 		case client := <-hub.unregister:
-			if _, ok := hub.clients[client]; ok {
+			if _, ok := hub.clients.Get(client.ID); ok {
 				// Client entfernen
-				for _, room := range client.rooms {
-					room.unregister <- client
-				}
-				delete(hub.clients, client)
+				client.rooms.ForEach(func(key string, value *Room) bool {
+					value.unregister <- client
+					return true
+				})
 				close(client.send)
+				client.conn.Close()
+				hub.clients.Del(client.ID)
 
 				// Rate-Limiter entfernen
 				log.Printf("[MSG-HUB] Client abgemeldet: %s", client.ID)
-			}
-
-		// Nachricht an alle Clients im Hub schicken
-		case event := <-hub.send:
-			for client := range hub.clients {
-				select {
-				case client.send <- event:
-				default:
-					// Client entfernen
-					for _, room := range client.rooms {
-						room.unregister <- client
-					}
-					delete(hub.clients, client)
-					close(client.send)
-
-					// Rate-Limiter entfernen
-					log.Printf("[WARN] Event-Verlust bei Client %s", client.ID)
-				}
 			}
 		}
 	}
@@ -119,7 +96,8 @@ func (hub *Hub) OnConnect(w http.ResponseWriter, r *http.Request) (*Client, erro
 
 	// Client erstellen und zum Hub hinzufügen
 	client := newClient(hub, conn)
-	hub.register <- client
+	// Client Register
+	hub.clients.Set(client.ID, client)
 
 	// Go-Routinen für den Client zum Lesen und Schreiben von Nachrichten
 	go client.readMessage()
@@ -130,7 +108,7 @@ func (hub *Hub) OnConnect(w http.ResponseWriter, r *http.Request) (*Client, erro
 
 // On registriert einen Event-Handler für ein bestimmtes Ereignis
 func (hub *Hub) On(event string, eventHandler EventHandler) *Hub {
-	hub.events[event] = eventHandler
+	hub.events.Set(event, eventHandler)
 	return hub
 }
 
@@ -138,7 +116,7 @@ func (hub *Hub) On(event string, eventHandler EventHandler) *Hub {
 func (hub *Hub) CreateRooms(roomNames []string) {
 	for _, name := range roomNames {
 		room := newRoom(name)
-		hub.rooms[name] = room
+		hub.rooms.Set(name, room)
 	}
 }
 
@@ -149,19 +127,19 @@ func (hub *Hub) Broadcast(event *Event) {
 
 // BroadcastToRoom sendet ein Ereignis an alle Clients in einem bestimmten Raum
 func (hub *Hub) BroadcastToRoom(roomName string, event *Event) {
-	if room, ok := hub.rooms[roomName]; ok {
+	if room, ok := hub.rooms.Get(roomName); ok {
 		room.broadcast(event)
 	}
 }
 
 func (hub *Hub) SubscribeToRoom(roomName string, client *Client) {
-	if room, ok := hub.rooms[roomName]; ok {
+	if room, ok := hub.rooms.Get(roomName); ok {
 		room.subscribe(client)
 	}
 }
 
 func (hub *Hub) UnsubscribeFromRoom(roomName string, client *Client) {
-	if room, ok := hub.rooms[roomName]; ok {
+	if room, ok := hub.rooms.Get(roomName); ok {
 		room.unsubscribe(client)
 	}
 }
