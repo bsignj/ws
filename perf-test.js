@@ -8,8 +8,9 @@ const sendMessageTime = new Trend('ws_send_message_time');
 
 export let options = {
     stages: [
-        { duration: '1m', target: 100 },  // Ramp-up to 100 users over 1 minute
-        { duration: '3m', target: 100 },  // Hold 100 users for 3 minutes
+        { duration: '1m', target: 500 },  // Ramp-up to 100 users over 1 minute
+        { duration: '3m', target: 1000 }, // Ramp-up to 1000 users over 3 minutes
+        { duration: '2m', target: 1000 }, // Sustain 1000 users for 2 minutes
         { duration: '1m', target: 0 },    // Ramp-down to 0 users
     ],
 };
