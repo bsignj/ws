@@ -11,148 +11,143 @@
 </head>
 
 <body>
-    <div class="flex h-screen overflow-hidden">
-        <!-- Sidebar Toggle Button -->
-        <button id="toggle-chat" class="bg-gray-800 text-white p-2">Chat</button>
+<div class="flex h-screen overflow-hidden">
+    <!-- Sidebar Toggle Button -->
+    <button id="toggle-chat" class="bg-gray-800 text-white p-2">Chat</button>
 
-        <!-- Chat Sidebar -->
-        <div id="chat-sidebar" class="bg-gray-900 text-white w-0 overflow-hidden transition-width duration-300 flex flex-col">
-            <div class="p-4 flex-grow overflow-y-auto overflow-x-hidden">
-                <h2 class="text-lg mb-4">Chat</h2>
-                <div id="chat" class="chat-messages space-y-4">
-                    <!-- Nachrichten hier einfügen -->
-                </div>
-            </div>
-            <div class="p-4">
-                <input type="text" id="newMessage" placeholder="Type Message..." class="w-full p-2 bg-gray-800 rounded" onkeydown="handleKeyPress(event)">
-                <button id="sendMessage" class="mt-2 w-full bg-blue-500 text-white p-2 rounded">Send Message</button>
+    <!-- Chat Sidebar -->
+    <div id="chat-sidebar" class="bg-gray-900 text-white w-0 overflow-hidden transition-width duration-300 flex flex-col">
+        <div class="p-4 flex-grow overflow-y-auto overflow-x-hidden">
+            <h2 class="text-lg mb-4">Chat</h2>
+            <div id="chat" class="chat-messages space-y-4">
+                <!-- Nachrichten hier einfügen -->
             </div>
         </div>
-        <script>
-            const toggleButton = document.getElementById('toggle-chat');
-            const chatSidebar = document.getElementById('chat-sidebar');
-
-            toggleButton.addEventListener('click', () => {
-                if (chatSidebar.style.width === '0px' || chatSidebar.style.width === '') {
-                    chatSidebar.style.width = '20%'; // Breite der Chat-Leiste
-                } else {
-                    chatSidebar.style.width = '0px';
-                }
-            });
-        </script>
+        <div class="p-4">
+            <input type="text" id="newMessage" placeholder="Type Message..." class="w-full p-2 bg-gray-800 rounded" onkeydown="handleKeyPress(event)">
+            <button id="sendMessage" class="mt-2 w-full bg-blue-500 text-white p-2 rounded">Send Message</button>
+        </div>
     </div>
-    
-    <!-- JS -->
-    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
     <script>
-        // Klasse zur Repräsentation einer Nachricht, die gesendet oder empfangen wird
-        class Message {
-            constructor(from, message, sent = new Date()) {
-                this.from = from;
-                this.message = message;
-                this.sent = sent instanceof Date ? sent : new Date(sent);
+        const toggleButton = document.getElementById('toggle-chat');
+        const chatSidebar = document.getElementById('chat-sidebar');
+
+        toggleButton.addEventListener('click', () => {
+            if (chatSidebar.style.width === '0px' || chatSidebar.style.width === '') {
+                chatSidebar.style.width = '20%'; // Breite der Chat-Leiste
+            } else {
+                chatSidebar.style.width = '0px';
             }
-
-            // Methode zur Formatierung der Nachricht
-            formatTime() {
-                return this.sent.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit'});
-            }
-        }
-
-        class WsClient {
-            constructor(url) {
-                this.url = url;
-                this.ws = new WebSocket(url);
-                this.eventListener = {};
-
-                // Promise für die WebSocket-Verbindung
-                this.isReady = new Promise((resolve, reject) => {
-                    this.ws.onopen = () => {
-                        console.log(`Connected to WebSocket at ${url}`);
-                        resolve();
-                    };
-
-                    this.ws.onclose = () => {
-                        console.log('WebSocket connection closed');
-                    };
-
-                    this.ws.onerror = (error) => {
-                        console.error(`WebSocket error: ${error}`);
-                        reject(error);
-                    };
-                });
-
-                this.ws.onmessage = (response) => {
-                    try {
-                        const data = JSON.parse(response.data);
-                        if (data.type && data) {
-                            const callback = this.eventListener[data.type];
-                            if (callback) {
-                                callback(data.payload);
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Error parsing WebSocket message:', e);
-                    }
-                };
-            }
-
-            // Methode, um Events zu registrieren
-            on(event, callback) {
-                this.eventListener[event] = callback;
-            }
-
-            // Methode, um Nachrichten zu senden
-            emit(type, payload = undefined) {
-                // Warte, bis die WebSocket-Verbindung geöffnet ist
-                this.isReady.then(() => {
-                    const event = {
-                        type: type,
-                    };
-
-                    if (payload !== undefined) {
-                        event.payload = payload;
-                    }
-
-                    const rawData = JSON.stringify(event);
-                    this.ws.send(rawData);
-                }).catch((error) => {
-                    console.error('Cannot send message, WebSocket connection failed:', error);
-                });
-            }
-        }
-
-        // WebSocket Client instanziieren
-        const ws = new WsClient('ws://' + window.location.host + '/ws');
-
-        // Warten bis die WebSocket-Verbindung geöffnet ist
-        ws.emit('subscribe:chat');
-
-        // Event für das Verlassen oder Neuladen der Seite registrieren
-        window.addEventListener('beforeunload', (event) => {
-            // Sende die unsubscribe Nachrichten
-            ws.emit('unsubscribe:chat');
         });
+    </script>
+</div>
 
-        
-        const newMessageText = document.querySelector('#newMessage');
-        const sendMessageButton = document.querySelector('#sendMessage');
-        
-        // Senden von Nachrichten beim Klicken auf den Button
-        sendMessageButton.onclick = () => {
-            const messageData = new Message("basti", newMessageText.value);
-            ws.emit('chat:message', messageData);
-        };
-        
-        // Event-Listener für "chat:message" registrieren
-        ws.on('chat:message', (data) => {
-            // Holen des Nachrichtenbereichs
-            var chat = document.getElementById('chat');
-            var receivedMessage = new Message(data.from, data.message, data.sent);
+<!-- JS -->
+<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+<script>
+    // Klasse zur Repräsentation einer Nachricht, die gesendet oder empfangen wird
+    class Message {
+        constructor(from, message, sent = new Date()) {
+            this.from = from;
+            this.message = message;
+            this.sent = sent instanceof Date ? sent : new Date(sent);
+        }
 
-            // Erstellen eines neuen div-Elements für die Nachricht
-            var newMessage = document.createElement('div');
-            newMessage.innerHTML = `
+        // Methode zur Formatierung der Nachricht
+        formatTime() {
+            return this.sent.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit'});
+        }
+    }
+
+    class WsClient {
+        constructor(url) {
+            this.url = url;
+            this.ws = new WebSocket(url);
+            this.eventListener = {};
+
+            // Promise für die WebSocket-Verbindung
+            this.isReady = new Promise((resolve, reject) => {
+                this.ws.onopen = () => {
+                    console.log(`Connected to WebSocket at ${url}`);
+                    resolve();
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket connection closed');
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error(`WebSocket error: ${error}`);
+                    reject(error);
+                };
+            });
+
+            this.ws.onmessage = (response) => {
+                try {
+                    const data = JSON.parse(response.data);
+                    if (Array.isArray(data) && data.length >= 2) {
+                        const type = data[0];
+                        const payload = data[1];
+                        const callback = this.eventListener[type];
+                        if (callback) {
+                            callback(payload);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing WebSocket message:', e);
+                }
+            };
+        }
+
+        // Methode, um Events zu registrieren
+        on(event, callback) {
+            this.eventListener[event] = callback;
+        }
+
+        // Methode, um Nachrichten zu senden
+        emit(type, payload = {}) {
+            // Warte, bis die WebSocket-Verbindung geöffnet ist
+            this.isReady.then(() => {
+                const event = [type, payload];
+                const rawData = JSON.stringify(event);
+                this.ws.send(rawData);
+            }).catch((error) => {
+                console.error('Cannot send message, WebSocket connection failed:', error);
+            });
+        }
+    }
+
+    // WebSocket Client instanziieren
+    const ws = new WsClient('ws://' + window.location.host + '/ws');
+
+    // Warten bis die WebSocket-Verbindung geöffnet ist
+    ws.emit('subscribe:chat');
+
+    // Event für das Verlassen oder Neuladen der Seite registrieren
+    window.addEventListener('beforeunload', (event) => {
+        // Sende die unsubscribe Nachrichten
+        ws.emit('unsubscribe:chat');
+    });
+
+
+    const newMessageText = document.querySelector('#newMessage');
+    const sendMessageButton = document.querySelector('#sendMessage');
+
+    // Senden von Nachrichten beim Klicken auf den Button
+    sendMessageButton.onclick = () => {
+        const messageData = new Message("basti", newMessageText.value);
+        ws.emit('chat:message', messageData);
+    };
+
+    // Event-Listener für "chat:message" registrieren
+    ws.on('chat:message', (data) => {
+        // Holen des Nachrichtenbereichs
+        var chat = document.getElementById('chat');
+        var receivedMessage = new Message(data.from, data.message, data.sent);
+
+        // Erstellen eines neuen div-Elements für die Nachricht
+        var newMessage = document.createElement('div');
+        newMessage.innerHTML = `
                 <div class="chat chat-start">
                     <div class="chat-image avatar">
                         <div class="w-8 h-8 rounded-full">
@@ -169,10 +164,10 @@
                 </div>
             `;
 
-            // Hinzufügen der neuen Nachricht zum Nachrichtenbereich
-            chat.appendChild(newMessage);
-        });
+        // Hinzufügen der neuen Nachricht zum Nachrichtenbereich
+        chat.appendChild(newMessage);
+    });
 
-    </script>
+</script>
 </body>
 </html>

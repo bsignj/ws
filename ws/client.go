@@ -27,7 +27,7 @@ type Client struct {
 	hub   *Hub
 	conn  *websocket.Conn
 	rooms *haxmap.Map[string, *Room]
-	send  chan *Event
+	send  chan []byte
 }
 
 func newClient(hub *Hub, conn *websocket.Conn) *Client {
@@ -36,7 +36,7 @@ func newClient(hub *Hub, conn *websocket.Conn) *Client {
 		hub:   hub,
 		conn:  conn,
 		rooms: haxmap.New[string, *Room](100),
-		send:  make(chan *Event, 1000),
+		send:  make(chan []byte, 1000),
 	}
 }
 
@@ -107,14 +107,9 @@ func (client *Client) writeMessage() {
 				return
 			}
 
-			message, err := event.Raw()
-			if err != nil {
-				log.ZLogger.Error("[ERR-Client] Nachricht erstellen -> %v", zap.Error(err))
-				continue
-			}
-			log.ZLogger.Debug("[MSG-Client] Ausgehende Nachricht -> %v", zap.String("Message", string(message)))
+			log.ZLogger.Debug("[MSG-Client] Ausgehende Nachricht -> %v", zap.String("Message", string(event)))
 
-			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+			if err := client.conn.WriteMessage(websocket.TextMessage, event); err != nil {
 				log.ZLogger.Error("[ERR-Client] Fehler beim Schreiben der Nachricht -> %v\n", zap.Error(err))
 				return
 			}

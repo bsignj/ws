@@ -136,7 +136,7 @@ func (hub *Hub) Broadcast(event *Event) {
 }
 
 // BroadcastToRoom sendet ein Ereignis an alle Clients in einem bestimmten Raum
-func (hub *Hub) BroadcastToRoom(roomName string, event *Event) {
+func (hub *Hub) BroadcastToRoom(roomName string, event []byte) {
 	if room, ok := hub.rooms.Get(roomName); ok {
 		room.broadcast(event)
 	}

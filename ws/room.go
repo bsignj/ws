@@ -12,7 +12,7 @@ type Room struct {
 	clients    *haxmap.Map[string, *Client]
 	register   chan *Client
 	unregister chan *Client
-	send       chan *Event
+	send       chan []byte
 	workers    int
 }
 
@@ -22,7 +22,7 @@ func newRoom(name string, cfg *config.Room) *Room {
 		clients:    haxmap.New[string, *Client](uintptr(cfg.BufferedClientSize)),
 		register:   make(chan *Client, cfg.BufferedRegisterSize),
 		unregister: make(chan *Client, cfg.BufferedUnregisterSize),
-		send:       make(chan *Event, cfg.BufferedMessageSize),
+		send:       make(chan []byte, cfg.BufferedMessageSize),
 		workers:    100,
 	}
 
@@ -76,7 +76,7 @@ func (room *Room) consumeBroadcastedMessage(workerID int) {
 }
 
 // Schickt die Nachricht an alle Clients im Raum
-func (room *Room) broadcast(event *Event) {
+func (room *Room) broadcast(event []byte) {
 	room.send <- event
 }
 
