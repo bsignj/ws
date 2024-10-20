@@ -1,22 +1,22 @@
 app:
-  name: "MyApp"
-  port: "8080"
+  name: "ws-chat-app"
+  port: "8383"
 
 hub:
-  buffered_register_size: 100
-  buffered_unregister_size: 100
-  buffered_message_size: 500
-  buffered_room_size: 50
-  buffered_event_size: 50
-  buffered_client_size: 100
+  buffered_register_size: 1000
+  buffered_unregister_size: 1000
+  buffered_message_size: 1000
+  buffered_room_size: 100
+  buffered_event_size: 100000
+  buffered_client_size: 5000
 
 room:
-  buffered_register_size: 100
-  buffered_unregister_size: 100
-  buffered_message_size: 500
-  buffered_client_size: 100
+  buffered_register_size: 1000
+  buffered_unregister_size: 1000
+  buffered_message_size: 100000
+  buffered_client_size: 5000
 
 logger:
-  log_level: "info"
-  log_output_path: "/var/log/myapp/output.log"
-  log_err_output_path: "/var/log/myapp/error.log"
+  log_level: "DEBUG"
+  log_output_path: "stdout"
+  log_err_output_path: "stderr"
